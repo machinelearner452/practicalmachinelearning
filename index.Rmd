@@ -1,0 +1,156 @@
+---
+title: "Practical Machine Learning"
+author: "Joe Larson"
+date: "March 19, 2017"
+output: html_document
+---
+## Data Importing
+
+```{r setup, include=FALSE, warning=FALSE, message=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+##Data Importing
+rm(list=ls())                # free up memory for the download of the data sets
+setwd("C:/Users/Joe/Documents/Coursera/Johns Hopkins University/Practical Machine Learning/Project_1")
+
+library(knitr)
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(rattle)
+library(randomForest)
+library(corrplot)
+
+set.seed(54)
+
+# set the URL 
+UrlTrain <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+UrlTest  <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+
+#  datasets downloaded
+training <- read.csv(url(UrlTrain))
+testing  <- read.csv(url(UrlTest))
+
+
+```
+##Course Project Assignment
+
+#### "Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement - a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: http://groupware.les.inf.puc-rio.br/har (see the section on the Weight Lifting Exercise Dataset)."
+
+####The scripts have been solely produced, tested and executed on Asus Zenbook, R X64 3.1.2 and RStudio Version 0.98.1091.
+
+##Project Goal
+####The goal of this project is to predict the manner in which they did the exercise. The prediction model will be used to predict 20 different test cases. The variable in the training set - "classe" will be the determiedn factor. Describing how the model is built, how to cross validates it, evaluate the expected out of sample error, and explain the rationales of any choice made. 
+
+####The 5 possible -Classe- values or methods are:
+#####A: Exactly according to the specification 
+#####B: Throwing the elbows to the front 
+#####C: Lifting the dumbbell only halfway 
+#####D: Lowering the dumbbell only halfway 
+#####E: Throwing the hips to the front
+
+####The training data set (TrainSet) contains 19622 observations and 160 variables. The testing data set (TestSet) contains 20 observations and 160 variables. The aim is to predict the outcome of the "classe" variable in the training set, validate it, and test it on the TestSet.
+
+##Data cleaning
+####Clean off the variable that countains mostly NAs (80%). Remove 'X', 'Name' and 'timestamps' variables (they are the culumns 1-5)
+
+```{r dataprep, echo = TRUE}
+
+# create a partition with the training dataset 
+inTrain  <- createDataPartition(training$classe, p=0.8, list=FALSE)
+TrainSet <- training[inTrain, ]
+TestSet  <- training[-inTrain, ]
+
+# remove variables with Nearly Zero Variance
+nzv <- nearZeroVar(TrainSet)
+TrainSet <- TrainSet[, -nzv]
+TestSet  <- TestSet[, -nzv]
+
+# remove variables that are mostly NA, if more than 20% data, information included
+removeNA    <- sapply(TrainSet, function(x) mean(is.na(x))) > 0.80
+TrainSet <- TrainSet[, removeNA==FALSE]
+TestSet  <- TestSet[, removeNA==FALSE]
+
+# remove identification variables (columns 1 to 5)
+TrainSet <- TrainSet[, -(1:5)]
+TestSet  <- TestSet[, -(1:5)]
+
+dim(TrainSet)
+dim(TestSet)
+
+```
+
+## Including Plots of themethods tested
+
+```{r plots, echo=FALSE, warning=FALSE, message=FALSE}
+
+# Gradient Boosting Machine model fit
+set.seed(54)
+controlGradBootM <- trainControl(method = "repeatedcv", number = 5, repeats = 1)
+modFitGradBootM  <- train(classe ~ ., data=TrainSet, method = "gbm",trControl = controlGradBootM, verbose = FALSE)
+modFitGradBootM$finalModel
+
+# Gradient Boosting Machine prediction on Test dataset
+predictGradBootM <- predict(modFitGradBootM, newdata=TestSet)
+confMatGradBootM <- confusionMatrix(predictGradBootM, TestSet$classe)
+confMatGradBootM
+
+# Gradient Boosting Machine plot matrix results
+plot(confMatGradBootM$table, col = confMatGradBootM$byClass, main = paste("GBM - Accuracy =", round(confMatGradBootM$overall['Accuracy'], 4)))
+
+
+# Decision Tree model fit
+set.seed(54)
+modFitDecTree <- rpart(classe ~ ., data=TrainSet, method="class")
+fancyRpartPlot(modFitDecTree)
+
+# Decision Tree prediction on Test dataset
+predictDecTree <- predict(modFitDecTree, newdata=TestSet, type="class")
+confMatDecTree <- confusionMatrix(predictDecTree, TestSet$classe)
+confMatDecTree
+
+# Decision Tree plot matrix results
+plot(confMatDecTree$table, col = confMatDecTree$byClass,main = paste("Decision Tree - Accuracy =",round(confMatDecTree$overall['Accuracy'], 4)))
+
+
+# Random Forest model fit 
+set.seed(54)
+controlRanFor <- trainControl(method="cv", number=4, verboseIter=FALSE)
+modFitRandForest <- train(classe ~ ., data=TrainSet, method="rf",trControl=controlRanFor)
+modFitRandForest$finalModel
+
+# Random Forest prediction on Test dataset
+predictRandForest <- predict(modFitRandForest, newdata=TestSet)
+confMatRandForest <- confusionMatrix(predictRandForest, TestSet$classe)
+confMatRandForest
+
+# Random Forest plot matrix results
+plot(confMatRandForest$table, col = confMatRandForest$byClass, main = paste("Random Forest - Accuracy =", round(confMatRandForest$overall['Accuracy'], 4)))
+
+```
+##Performance evaluation of the Gradient Boosting Machine, Decision Tree and Random Forest algorithm.
+
+####The next step is to estimate the performance of the models on the validation data set here called (TestSet). A confusionMatrix function and both the estimated accuracy and the the estimated out-of-sample error of the model are calculated.
+
+####Prediction for the Test Data Set (TestSet).
+####Prediction using the model modelRandForest 
+
+##Conclusions
+####The random forest model provides the highest accuracy of the methods tested, 99.98%.
+
+```{r results, echo=FALSE, warning=FALSE, message=FALSE}
+
+print(confusionMatrix(TestSet$classe, predictRandForest))
+accuracy <- postResample(predictRandForest, TestSet$classe)
+print(accuracy)
+
+Results <- 1 - as.numeric(confusionMatrix(TestSet$classe, predictRandForest)$overall[1])
+print(Results)
+
+predictTEST <- predict(modFitRandForest, newdata=testing)
+print(predictTEST)
+
+
+corMatrix <- cor(TrainSet[, -54])
+corrplot(corMatrix, order = "alphabet", method = "circle", type = "lower", title="Correlation Matrix", tl.cex = 0.5, tl.srt= 45, tl.col = rgb(0, 0, 0))
+
+```
